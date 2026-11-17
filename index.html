@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>巨大娘クリッカー - 絶望と破壊の記録 -</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&display=swap');
+        
+        body { font-family: 'Noto Serif JP', serif; overscroll-behavior-y: none; }
+
+        .stomp-btn {
+            transition: transform 0.05s ease-in-out, box-shadow 0.1s;
+            box-shadow: 0 0 30px rgba(220, 38, 38, 0.3);
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .stomp-btn:active {
+            transform: scale(0.92);
+            box-shadow: 0 0 10px rgba(220, 38, 38, 0.8);
+        }
+
+        .floating-text {
+            position: absolute;
+            font-weight: bold;
+            font-size: 1.2rem;
+            pointer-events: none;
+            animation: floatUp 1s ease-out forwards;
+            text-shadow: 0 0 5px #000;
+            z-index: 50;
+        }
+
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-50px) scale(1.5); }
+        }
+
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+        
+        .disabled-btn { opacity: 0.5; cursor: not-allowed; filter: grayscale(80%); }
+
+        /* スキル出現時のアニメーション */
+        @keyframes pulse-glow-blue {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 15px 5px rgba(59, 130, 246, 0.5); }
+            50% { transform: scale(1.1); box-shadow: 0 0 25px 15px rgba(59, 130, 246, 0.8); }
+        }
+        @keyframes pulse-glow-green {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 15px 5px rgba(16, 185, 129, 0.5); }
+            50% { transform: scale(1.1); box-shadow: 0 0 25px 15px rgba(16, 185, 129, 0.8); }
+        }
+        .skill-orb-blue {
+            animation: pulse-glow-blue 2s infinite ease-in-out;
+            background: radial-gradient(circle, #60a5fa 20%, #2563eb 100%);
+        }
+        .skill-orb-green {
+            animation: pulse-glow-green 2s infinite ease-in-out;
+            background: radial-gradient(circle, #34d399 20%, #059669 100%);
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0); }
+            10%, 30%, 50%, 70%, 90% { transform: translate(-5px, -5px); }
+            20%, 40%, 60%, 80% { transform: translate(5px, 5px); }
+        }
+        .shake-active { animation: shake 0.5s; }
+
+        /* QTE警告アニメーション */
+        @keyframes qte-warn {
+            0%, 100% { background-color: rgba(220, 38, 38, 0.1); }
+            50% { background-color: rgba(220, 38, 38, 0.4); }
+        }
+        .qte-active-bg { animation: qte-warn 1s infinite; }
+        
+        .tab-active { border-bottom: 2px solid #ef4444; color: #ef4444; }
+        .tab-inactive { color: #9ca3af; }
+    </style>
+</head>
+<body class="h-dvh bg-gray-950 text-white flex flex-col relative overflow-hidden">
+
+    <!-- 設定モーダル (初期非表示) -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/90 z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-lg p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <h2 class="text-xl font-bold text-red-400 border-b border-gray-700 pb-2">ゲーム設定</h2>
+            
+            <div>
+                <label class="block text-sm text-gray-400 mb-1">巨大化する女の子の名前</label>
+                <input type="text" id="input-name" class="w-full bg-gray-800 text-white border border-gray-600 rounded p-2" value="名無しちゃん">
+            </div>
+
+            <div>
+                <label class="block text-sm text-blue-400 mb-1">フィズの青技 (時限バフ)</label>
+                <input type="text" id="input-skill1" class="w-full bg-gray-800 text-white border border-blue-900 rounded p-2 focus:outline-none focus:border-blue-500" value="オーラ強化">
+            </div>
+
+            <div>
+                <label class="block text-sm text-green-400 mb-1">ヘリテの緑技 (瞬間獲得)</label>
+                <input type="text" id="input-skill2" class="w-full bg-gray-800 text-white border border-green-900 rounded p-2 focus:outline-none focus:border-green-500" value="正義の小人絶滅ビーム♡">
+            </div>
+
+            <div>
+                <label class="block text-sm text-yellow-400 mb-1">カスタム装備の名前</label>
+                <input type="text" id="input-custom-shoe" class="w-full bg-gray-800 text-white border border-yellow-900 rounded p-2 focus:outline-none focus:border-yellow-500" value="お気に入りの靴">
+            </div>
+
+            <button onclick="saveSettings()" class="w-full bg-red-800 hover:bg-red-700 text-white font-bold py-2 rounded transition mt-4">設定を保存</button>
+        </div>
+    </div>
+
+    <!-- 確認用カスタムモーダル (標準のconfirmの代替) -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/90 z-[110] hidden flex items-center justify-center p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-lg p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <h2 class="text-xl font-bold text-purple-400 border-b border-gray-700 pb-2">次元跳躍の確認</h2>
+            <p id="confirm-text" class="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed"></p>
+            <div class="flex gap-3 mt-4">
+                <button onclick="closeConfirmModal()" class="flex-1 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 rounded transition">キャンセル</button>
+                <button onclick="executePrestige()" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 rounded transition">実行する</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ランダム出現スキルボタン -->
+    <button id="random-skill-btn" class="hidden absolute w-16 h-16 rounded-full z-50 flex items-center justify-center text-3xl border-2 border-white cursor-pointer touch-manipulation" onclick="activateRandomSkill()">
+        ✨
+    </button>
+
+    <!-- QTE警告オーバーレイ -->
+    <div id="qte-overlay" class="hidden absolute inset-0 z-40 pointer-events-none qte-active-bg border-4 border-red-600 flex flex-col items-center justify-start pt-32">
+        <div class="bg-black/80 px-6 py-4 rounded-lg border border-red-600 text-center">
+            <h2 class="text-3xl font-black text-red-500 animate-pulse mb-2">⚠ 人類の激しい抵抗 ⚠</h2>
+            <p class="text-xl text-white">残り時間: <span id="qte-timer" class="text-red-400 font-bold">10.0</span> 秒</p>
+            <p class="text-lg text-gray-300">連打して迎撃しろ！: <span id="qte-count" class="text-yellow-400 font-bold">0 / 30</span> 回</p>
+        </div>
+    </div>
+
+    <!-- トップエリア（ステータス） -->
+    <header class="shrink-0 p-3 border-b border-red-900/50 bg-black/95 flex flex-col gap-2 z-20">
+        <div class="flex justify-between items-center">
+            <h1 class="text-base md:text-lg font-black text-red-600 tracking-widest drop-shadow-[0_0_5px_rgba(220,38,38,0.8)]">
+                絶望と破壊の記録
+            </h1>
+            <div class="flex gap-3">
+                <span class="text-xs text-purple-400 font-bold flex items-center">概念: <span id="concepts-display">0</span></span>
+                <button onclick="document.getElementById('settings-modal').classList.remove('hidden')" class="text-gray-400 hover:text-white text-lg">⚙️</button>
+            </div>
+        </div>
+        
+        <!-- 進捗バー -->
+        <div class="relative w-full">
+            <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                <span>目標: <span id="goal-display">8,000,000,000</span> 人</span>
+                <span>STAGE: <span id="stage-display" class="text-white font-bold">街区</span></span>
+            </div>
+            <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden border border-gray-700">
+                <div id="progress-bar" class="bg-red-600 h-full transition-all duration-500 shadow-[0_0_10px_rgba(220,38,38,1)]" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-sm mt-1">
+            <!-- 犠牲者数 (累積) -->
+            <div class="bg-gray-900/80 rounded p-1.5 border border-gray-800 text-center flex flex-col">
+                <span class="text-[10px] text-gray-500">犠牲者数 (累計)</span>
+                <div><span id="pop-display" class="text-xl font-bold text-red-500 drop-shadow-md">0</span> <span class="text-[10px]">人</span></div>
+            </div>
+            <!-- 所持DP (通貨) -->
+            <div class="bg-gray-900/80 rounded p-1.5 border border-gray-800 text-center flex flex-col">
+                <span class="text-[10px] text-gray-500">所持 DP</span>
+                <div><span id="dp-display" class="text-xl font-bold text-blue-400 drop-shadow-md">0</span> <span class="text-[10px]">DP</span></div>
+            </div>
+        </div>
+
+        <div class="flex gap-2 justify-center text-xs w-full mt-1">
+            <div class="bg-gray-900/80 rounded px-2 py-1 border border-gray-800 flex-1 flex justify-between">
+                <span class="text-gray-400">身長:</span> <span id="height-display" class="text-white font-bold">15m</span>
+            </div>
+            <div class="bg-gray-900/80 rounded px-2 py-1 border border-gray-800 flex-1 flex justify-between">
+                <span class="text-gray-400">威力:</span> <span id="click-power-display" class="text-red-400 font-bold">1</span>
+            </div>
+            <div class="bg-gray-900/80 rounded px-2 py-1 border border-gray-800 flex-1 flex justify-between relative">
+                <span class="text-gray-400">自動:</span> <span id="auto-power-display" class="text-green-400 font-bold">0</span>
+                <span id="penalty-icon" class="absolute -top-2 -right-2 text-[10px] bg-red-600 px-1 rounded hidden animate-bounce">↓半減中</span>
+            </div>
+        </div>
+        
+        <!-- バフ表示 -->
+        <div id="buff-indicator" class="hidden absolute inset-0 bg-blue-900/20 animate-pulse z-0 pointer-events-none border-b-4 border-blue-500"></div>
+    </header>
+
+    <!-- ミドルエリア（クリックボタン） -->
+    <section class="flex-1 flex justify-center items-center relative bg-gradient-to-b from-gray-950 to-gray-900" id="click-area">
+        <button id="destroy-btn" class="stomp-btn bg-black border-4 border-red-900 rounded-full w-48 h-48 md:w-64 md:h-64 flex flex-col items-center justify-center relative overflow-hidden group cursor-pointer select-none">
+            <div class="absolute inset-0 bg-red-900/10 group-hover:bg-red-900/30 transition-colors pointer-events-none"></div>
+            <div class="z-10 flex flex-col items-center pointer-events-none">
+                <span id="stage-icon" class="text-6xl mb-2 drop-shadow-lg transition-all duration-500">🏙️</span>
+                <span id="btn-text" class="text-lg md:text-2xl font-bold text-red-500 tracking-widest drop-shadow-md">街を踏み潰す</span>
+                <span class="text-[10px] text-red-800 mt-2 font-bold tracking-widest">TAP TO DESTROY</span>
+            </div>
+        </button>
+    </section>
+
+    <!-- ボトムエリア（タブ付き画面） -->
+    <section class="h-1/3 md:h-2/5 min-h-[16rem] shrink-0 flex flex-col border-t border-gray-800 bg-gray-900 z-30">
+        <!-- タブヘッダー -->
+        <div class="flex border-b border-gray-800 bg-black text-sm font-bold">
+            <button onclick="switchTab('upgrades')" id="tab-upgrades" class="flex-1 py-3 text-center tab-active transition-colors">能力解放</button>
+            <button onclick="switchTab('equipment')" id="tab-equipment" class="flex-1 py-3 text-center tab-inactive transition-colors">装備</button>
+            <button onclick="switchTab('prestige')" id="tab-prestige" class="flex-1 py-3 text-center tab-inactive transition-colors">転生</button>
+            <button onclick="switchTab('log')" id="tab-log" class="flex-1 py-3 text-center tab-inactive transition-colors relative">
+                記録 <span id="log-badge" class="hidden absolute top-2 right-[20%] w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+            </button>
+        </div>
+        
+        <!-- タブコンテンツ領域 -->
+        <div class="flex-1 overflow-y-auto custom-scroll relative bg-gray-900/80">
+            
+            <!-- 能力解放タブ -->
+            <div id="content-upgrades" class="p-3 space-y-2 pb-8">
+                <!-- JSで生成 -->
+            </div>
+
+            <!-- 装備タブ -->
+            <div id="content-equipment" class="hidden p-3 space-y-2 pb-8">
+                <!-- JSで生成 -->
+            </div>
+
+            <!-- 転生タブ -->
+            <div id="content-prestige" class="hidden p-6 flex flex-col items-center justify-center text-center space-y-4 h-full">
+                <div>
+                    <h3 class="text-xl font-bold text-purple-400 mb-2">次元跳躍 (転生)</h3>
+                    <p class="text-sm text-gray-300">目標人口を踏破した時、この世界を崩壊させ<br>「概念の欠片」を持って次の世界へ移行できます。</p>
+                </div>
+                <div class="bg-black/50 p-3 rounded border border-gray-700 w-full text-sm">
+                    <p>現在の進行度: <span id="prestige-prog" class="font-bold text-white">0%</span></p>
+                    <p>獲得予定の欠片: <span id="prestige-reward" class="font-bold text-purple-400">0</span></p>
+                    <p class="text-[10px] text-gray-400 mt-1">※欠片1つにつき、全威力が永続で+20%されます</p>
+                </div>
+                <button id="prestige-btn" onclick="doPrestige()" class="bg-gray-800 text-gray-500 font-bold py-3 px-6 rounded-lg w-full cursor-not-allowed transition duration-300 border border-gray-700">
+                    目標未達（転生不可）
+                </button>
+            </div>
+            
+            <!-- 記録 (ログ) タブ -->
+            <div id="content-log" class="hidden p-3 h-full flex flex-col">
+                <div class="text-[10px] text-gray-500 mb-2 font-bold tracking-widest uppercase border-b border-gray-800 pb-1">
+                    World News & System Log
+                </div>
+                <div id="log-container" class="flex-1 overflow-y-auto space-y-1.5 text-xs text-gray-400 custom-scroll pr-1">
+                    <div class="text-gray-500"><span class="text-red-700">[SYSTEM]</span> 観測を開始。<span id="log-protag-name">名無しちゃん</span>が眼下を見下ろしている。</div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <script>
+        // ==========================================
+        // 1. ゲーム状態の管理
+        // ==========================================
+        let state = {
+            population: 0,   // 累計犠牲者数 (減らない)
+            dp: 0,           // 所持通貨 (消費する)
+            clickPower: 1,   // ヘリテが強化するベース威力
+            autoPower: 0,    // フィズが強化するベース自動威力
+            
+            buffMult: 1,     // スキルによる一時バフ倍率
+            penaltyMult: 1,  // QTE失敗時のペナルティ倍率
+            
+            goal: 8000000000,
+            prestigeCount: 0,
+            concepts: 0,     // 概念の欠片 (永続バフ用)
+            
+            shoe: 'barefoot', // 現在の装備
+            unlockedShoes: ['barefoot'], // 解放済みの装備
+            customShoeName: 'お気に入りの靴',
+            
+            // QTE関連
+            qte: { active: false, clicks: 0, timer: 0 },
+            
+            // 設定
+            protagName: "名無しちゃん",
+            skill1Name: "オーラ強化",          // 青(フィズ)
+            skill2Name: "正義の小人絶滅ビーム♡" // 緑(ヘリテ)
+        };
+
+        // 装備の定義
+        const SHOES = {
+            barefoot: { name: "裸足", cost: 0, tapMult: 2.0, autoMult: 0.5, bonusRate: 1.0, icon: "👣" },
+            socks:    { name: "靴下", cost: 500, tapMult: 1.5, autoMult: 1.0, bonusRate: 1.0, icon: "🧦" },
+            tabi:     { name: "足袋", cost: 2000, tapMult: 1.0, autoMult: 1.5, bonusRate: 1.2, icon: "👘" },
+            loafer:   { name: "ローファー", cost: 8000, tapMult: 1.2, autoMult: 1.2, bonusRate: 1.5, icon: "👞" },
+            strap:    { name: "ストラップシューズ", cost: 30000, tapMult: 1.5, autoMult: 1.5, bonusRate: 1.8, icon: "🥿" },
+            boots:    { name: "ロングブーツ", cost: 100000, tapMult: 1.0, autoMult: 1.0, bonusRate: 2.5, icon: "👢" },
+            military: { name: "鋼鉄の軍靴", cost: 500000, tapMult: 0.5, autoMult: 4.0, bonusRate: 1.0, icon: "🥾" },
+            custom:   { name: "カスタム枠", cost: 2000000, tapMult: 3.0, autoMult: 3.0, bonusRate: 2.0, icon: "✨" }
+        };
+
+        // アップグレードデータ (コストはDP)
+        let UPGRADES = [
+            { id: "h1", type: "herite", name: "踏みつけ指導", desc: "タップの基礎威力が上昇する。", cost: 15, costMult: 1.5, val: 1, level: 0 },
+            { id: "f1", type: "fizz", name: "信者の獲得", desc: "自動的にDPと犠牲者を増やす。", cost: 50, costMult: 1.3, val: 2, level: 0 },
+            { id: "h2", type: "herite", name: "脚力強化魔法", desc: "タップの威力が大幅に上昇する。", cost: 300, costMult: 1.6, val: 10, level: 0 },
+            { id: "f2", type: "fizz", name: "第2の巨大娘", desc: "毎秒の自動獲得量が大きく増加。", cost: 1000, costMult: 1.4, val: 15, level: 0 },
+            { id: "h3", type: "herite", name: "重力反転の踵", desc: "タップ威力が爆発的に上昇。", cost: 5000, costMult: 1.6, val: 100, level: 0 },
+            { id: "f3", type: "fizz", name: "建物の概念脆化", desc: "自動獲得量が劇的に増加する。", cost: 10000, costMult: 1.5, val: 150, level: 0 }
+        ];
+
+        // ==========================================
+        // UI要素
+        // ==========================================
+        const ui = {
+            pop: document.getElementById('pop-display'),
+            dp: document.getElementById('dp-display'),
+            prog: document.getElementById('progress-bar'),
+            goal: document.getElementById('goal-display'),
+            stage: document.getElementById('stage-display'),
+            height: document.getElementById('height-display'),
+            cPower: document.getElementById('click-power-display'),
+            autoPower: document.getElementById('auto-power-display'),
+            btn: document.getElementById('destroy-btn'),
+            btnText: document.getElementById('btn-text'),
+            stageIcon: document.getElementById('stage-icon'),
+            log: document.getElementById('log-container'),
+            upgCont: document.getElementById('content-upgrades'),
+            skillBtn: document.getElementById('random-skill-btn'),
+            concepts: document.getElementById('concepts-display')
+        };
+
+        // ==========================================
+        // 計算とステージロジック
+        // ==========================================
+        function getConceptMult() {
+            return 1 + (state.concepts * 0.2); // 欠片1つにつき +20%
+        }
+
+        function getActualClickPower() {
+            const base = state.clickPower;
+            const shoeMult = SHOES[state.shoe].tapMult;
+            return base * shoeMult * state.buffMult * getConceptMult();
+        }
+
+        function getActualAutoPower() {
+            const base = state.autoPower;
+            const shoeMult = SHOES[state.shoe].autoMult;
+            return base * shoeMult * state.penaltyMult * getConceptMult();
+        }
+
+        function getStageInfo(pop) {
+            if (pop < 100000) return { h: "15m", icon: "🏙️", text: "街区を踏み潰す", stage: "第1次: 街区" };
+            if (pop < 10000000) return { h: "150m", icon: "🌆", text: "大都市を粉砕する", stage: "第2次: 大都市" };
+            if (pop < 1000000000) return { h: "50km", icon: "🗺️", text: "国家を蹂躙する", stage: "第3次: 国家" };
+            if (pop < state.goal) return { h: "2,000km", icon: "🗾", text: "大陸を沈める", stage: "第4次: 大陸" };
+            return { h: "12,000km", icon: "🌍", text: "地球を握り潰す", stage: "終局: 地球" };
+        }
+
+        // ==========================================
+        // UI更新・描画
+        // ==========================================
+        function updateUI() {
+            ui.pop.innerText = Math.floor(state.population).toLocaleString();
+            ui.dp.innerText = Math.floor(state.dp).toLocaleString();
+            ui.concepts.innerText = state.concepts.toLocaleString();
+            
+            const cp = getActualClickPower();
+            const ap = getActualAutoPower();
+            ui.cPower.innerText = cp >= 100 ? Math.floor(cp).toLocaleString() : cp.toFixed(1);
+            ui.autoPower.innerText = ap >= 100 ? Math.floor(ap).toLocaleString() : ap.toFixed(1);
+
+            // 身長とステージ
+            const sInfo = getStageInfo(state.population);
+            ui.height.innerText = sInfo.h;
+            ui.stage.innerText = sInfo.stage;
+            ui.btnText.innerText = sInfo.text;
+            if (ui.stageIcon.innerText !== sInfo.icon) {
+                ui.stageIcon.innerText = sInfo.icon;
+            }
+
+            // 進捗バー
+            ui.goal.innerText = state.goal.toLocaleString();
+            const percent = Math.min((state.population / state.goal) * 100, 100);
+            ui.prog.style.width = percent + "%";
+
+            // 強化ボタンの状態更新
+            UPGRADES.forEach(upg => {
+                const btn = document.getElementById(`upg-${upg.id}`);
+                if (btn) {
+                    const costEl = document.getElementById(`cost-${upg.id}`);
+                    const lvlEl = document.getElementById(`lvl-${upg.id}`);
+                    costEl.innerText = Math.ceil(upg.cost).toLocaleString();
+                    lvlEl.innerText = upg.level;
+                    btn.classList.toggle('disabled-btn', state.dp < upg.cost);
+                }
+            });
+
+            // 装備UIの更新
+            Object.keys(SHOES).forEach(key => {
+                const btn = document.getElementById(`unlock-btn-${key}`);
+                if (btn && !state.unlockedShoes.includes(key)) {
+                    if (state.dp >= SHOES[key].cost) {
+                        btn.className = "text-xs px-3 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white cursor-pointer";
+                    } else {
+                        btn.className = "text-xs px-3 py-1 rounded bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700";
+                    }
+                }
+            });
+
+            // 転生UIの更新
+            document.getElementById('prestige-prog').innerText = percent.toFixed(2) + "%";
+            
+            // 獲得予定の欠片の計算 (目標を達成していれば1 + 余剰分)
+            let reward = 0;
+            if (state.population >= state.goal) {
+                reward = 1 + Math.floor((state.population - state.goal) / (state.goal * 0.1)); // 10%余剰ごとに+1
+            }
+            document.getElementById('prestige-reward').innerText = reward;
+
+            const pBtn = document.getElementById('prestige-btn');
+            if (state.population >= state.goal) {
+                pBtn.classList.remove('bg-gray-800', 'text-gray-500', 'cursor-not-allowed');
+                pBtn.classList.add('bg-purple-600', 'hover:bg-purple-500', 'text-white', 'shadow-[0_0_15px_rgba(168,85,247,0.8)]');
+                pBtn.innerText = "次元跳躍を実行する";
+            } else {
+                pBtn.className = "bg-gray-800 text-gray-500 font-bold py-3 px-6 rounded-lg w-full cursor-not-allowed transition duration-300 border border-gray-700";
+                pBtn.innerText = "目標未達（転生不可）";
+            }
+        }
+
+        function renderUpgrades() {
+            ui.upgCont.innerHTML = "";
+            UPGRADES.forEach(upg => {
+                const isHerite = upg.type === "herite";
+                const colorTheme = isHerite ? "green" : "blue";
+                
+                const html = `
+                <div id="upg-${upg.id}" class="bg-black/60 border border-gray-700 rounded-lg p-3 transition hover:border-${colorTheme}-500 cursor-pointer disabled-btn active:scale-95 touch-manipulation shadow-md flex flex-col gap-1.5" onclick="buyUpgrade('${upg.id}')">
+                    <div class="flex justify-between items-start">
+                        <h3 class="font-bold text-${colorTheme}-400 text-sm">${upg.name}</h3>
+                        <span class="text-[10px] bg-${colorTheme}-950 text-${colorTheme}-200 px-1.5 py-0.5 rounded border border-${colorTheme}-900">Lv <span id="lvl-${upg.id}">0</span></span>
+                    </div>
+                    <p class="text-[10px] text-gray-400 leading-tight">${upg.desc}</p>
+                    <div class="flex justify-between items-center text-xs border-t border-gray-800 pt-1.5 mt-0.5">
+                        <span class="text-gray-300">コスト: <span id="cost-${upg.id}" class="font-bold text-white text-sm">${Math.ceil(upg.cost).toLocaleString()}</span> DP</span>
+                        <span class="text-${colorTheme}-400 font-bold">+${upg.val}</span>
+                    </div>
+                </div>
+                `;
+                ui.upgCont.innerHTML += html;
+            });
+        }
+
+        function renderEquipment() {
+            const eqCont = document.getElementById('content-equipment');
+            eqCont.innerHTML = '<p class="text-[11px] text-gray-400 mb-2 leading-tight">DPを消費して装備を解放し、恩恵を得ます。<br>解放済みの装備はいつでも着脱可能です。</p>';
+            
+            Object.keys(SHOES).forEach(key => {
+                const shoe = SHOES[key];
+                const isUnlocked = state.unlockedShoes.includes(key);
+                const isEquipped = state.shoe === key;
+                const displayName = key === 'custom' ? state.customShoeName : shoe.name;
+                
+                let actionBtn = "";
+                if (isEquipped) {
+                    actionBtn = `<span class="text-[10px] bg-red-900 text-white px-2 py-1 rounded font-bold">装備中</span>`;
+                } else if (isUnlocked) {
+                    actionBtn = `<button onclick="equipShoe('${key}')" class="text-xs bg-gray-700 hover:bg-gray-600 text-white px-3 py-1 rounded transition border border-gray-500">履き替える</button>`;
+                } else {
+                    const canAfford = state.dp >= shoe.cost;
+                    const btnClass = canAfford ? "bg-blue-600 hover:bg-blue-500 text-white cursor-pointer" : "bg-gray-800 text-gray-500 cursor-not-allowed border border-gray-700";
+                    actionBtn = `<button id="unlock-btn-${key}" onclick="unlockShoe('${key}')" class="text-xs px-3 py-1 rounded transition ${btnClass}">解放 (${shoe.cost.toLocaleString()} DP)</button>`;
+                }
+
+                const html = `
+                <div class="bg-black/60 border ${isEquipped ? 'border-red-500 shadow-[0_0_8px_rgba(239,68,68,0.3)]' : 'border-gray-700'} rounded-lg p-3 flex justify-between items-center transition">
+                    <div>
+                        <div class="font-bold flex items-center gap-2 text-sm">${shoe.icon} ${displayName}</div>
+                        <div class="text-[10px] text-gray-400 mt-1 space-x-1">
+                            <span>威力: <span class="${shoe.tapMult > 1 ? 'text-red-400' : 'text-gray-500'}">x${shoe.tapMult.toFixed(1)}</span></span>
+                            <span>自動: <span class="${shoe.autoMult > 1 ? 'text-green-400' : 'text-gray-500'}">x${shoe.autoMult.toFixed(1)}</span></span>
+                            <span>頻度: <span class="${shoe.bonusRate > 1 ? 'text-blue-400' : 'text-gray-500'}">x${shoe.bonusRate.toFixed(1)}</span></span>
+                        </div>
+                    </div>
+                    <div class="shrink-0 ml-2">${actionBtn}</div>
+                </div>
+                `;
+                eqCont.innerHTML += html;
+            });
+        }
+
+        // ==========================================
+        // インタラクション・機能
+        // ==========================================
+        function addLog(msg, type = "normal") {
+            const el = document.createElement('div');
+            const time = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+            
+            let color = "text-gray-400";
+            let prefix = "NEWS";
+            if (type === "herite") { color = "text-green-400"; prefix = "HERITE"; }
+            if (type === "fizz") { color = "text-blue-400"; prefix = "FIZZ"; }
+            if (type === "system") { color = "text-red-400 font-bold"; prefix = "SYSTEM"; }
+            if (type === "skill") { color = "text-yellow-400 font-bold"; prefix = "SKILL"; }
+            if (type === "warn") { color = "text-orange-400 font-bold"; prefix = "ALERT"; }
+
+            msg = msg.replace(/名無しちゃん/g, state.protagName);
+
+            el.className = color;
+            el.innerHTML = `<span class="text-gray-600 text-[10px] mr-1">[${time} ${prefix}]</span> ${msg}`;
+            ui.log.appendChild(el);
+            ui.log.scrollTop = ui.log.scrollHeight;
+            if (ui.log.children.length > 50) ui.log.removeChild(ui.log.firstChild);
+            
+            // ログタブ以外を開いている場合は新着バッジを表示
+            const logTabContent = document.getElementById('content-log');
+            if (logTabContent && logTabContent.classList.contains('hidden')) {
+                document.getElementById('log-badge').classList.remove('hidden');
+            }
+        }
+
+        function switchTab(tabId) {
+            ['upgrades', 'equipment', 'prestige', 'log'].forEach(t => {
+                const content = document.getElementById(`content-${t}`);
+                if (content) content.classList.add('hidden');
+                
+                const btn = document.getElementById(`tab-${t}`);
+                if (btn) {
+                    btn.classList.remove('tab-active');
+                    btn.classList.add('tab-inactive');
+                }
+            });
+            
+            document.getElementById(`content-${tabId}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-${tabId}`);
+            activeBtn.classList.remove('tab-inactive');
+            activeBtn.classList.add('tab-active');
+            
+            // ログタブを開いた時はバッジを消し、一番下までスクロールする
+            if (tabId === 'log') {
+                document.getElementById('log-badge').classList.add('hidden');
+                ui.log.scrollTop = ui.log.scrollHeight;
+            }
+            if (tabId === 'equipment') {
+                renderEquipment();
+            }
+        }
+
+        window.unlockShoe = function(shoeId) {
+            const shoe = SHOES[shoeId];
+            if (state.dp >= shoe.cost && !state.unlockedShoes.includes(shoeId)) {
+                state.dp -= shoe.cost;
+                state.unlockedShoes.push(shoeId);
+                const displayName = shoeId === 'custom' ? state.customShoeName : shoe.name;
+                addLog(`装備「${displayName}」を解放しました！`, "system");
+                renderEquipment();
+                updateUI();
+            }
+        }
+
+        window.equipShoe = function(shoeId) {
+            if (state.unlockedShoes.includes(shoeId)) {
+                state.shoe = shoeId;
+                const displayName = shoeId === 'custom' ? state.customShoeName : SHOES[shoeId].name;
+                addLog(`「${displayName}」に履き替えました。`, "system");
+                renderEquipment();
+                updateUI();
+            }
+        }
+
+        window.buyUpgrade = function(id) {
+            const upg = UPGRADES.find(u => u.id === id);
+            if (state.dp >= upg.cost) {
+                state.dp -= upg.cost;
+                upg.level++;
+                upg.cost *= upg.costMult;
+                
+                if (upg.type === 'herite') state.clickPower += upg.val;
+                if (upg.type === 'fizz') state.autoPower += upg.val;
+                
+                addLog(`能力【${upg.name}】を Lv${upg.level} に強化しました。`, upg.type);
+                updateUI();
+            }
+        };
+
+        // メインクリック処理
+        ui.btn.addEventListener('click', (e) => {
+            // QTE中の処理
+            if (state.qte.active) {
+                state.qte.clicks++;
+                document.getElementById('qte-count').innerText = `${state.qte.clicks} / 30`;
+                
+                // QTE成功！
+                if (state.qte.clicks >= 30) {
+                    state.qte.active = false;
+                    document.getElementById('qte-overlay').classList.add('hidden');
+                    
+                    const bonus = getActualClickPower() * 500; // 成功ボーナス
+                    state.dp += bonus;
+                    state.population += bonus;
+                    
+                    addLog(`人類の抵抗を粉砕！防衛網を突破し、大量の犠牲者(${Math.floor(bonus).toLocaleString()})を出した！`, "skill");
+                    updateUI();
+                }
+                return; // QTE中は通常クリック判定はしない
+            }
+
+            // 通常処理
+            const pwr = getActualClickPower();
+            state.dp += pwr;
+            state.population += pwr;
+            
+            // エフェクト
+            const rect = ui.btn.getBoundingClientRect();
+            let x = e.clientX || (rect.left + rect.width / 2);
+            let y = e.clientY || (rect.top + rect.height / 2);
+            const el = document.createElement('div');
+            el.className = `floating-text ${state.buffMult > 1 ? 'text-blue-400' : 'text-red-500'}`;
+            const pwrDisplay = pwr >= 100 ? Math.floor(pwr).toLocaleString() : pwr.toFixed(1);
+            el.innerText = `+${pwrDisplay}`;
+            el.style.left = `${x - 20 + (Math.random()*40-20)}px`;
+            el.style.top = `${y - 20}px`;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+
+            if (Math.random() < 0.05) addLog("「ひぃぃ！足が、巨大な足が降ってくる！」", "normal");
+            updateUI();
+        });
+
+        // ==========================================
+        // ランダムスキル（青/緑のオーラ）
+        // ==========================================
+        let skillTimeout;
+        function scheduleRandomSkill() {
+            // 装備による出現頻度補正 (ブーツなら待機時間が短くなる)
+            const rate = SHOES[state.shoe].bonusRate;
+            const delay = (Math.random() * 20000 + 10000) / rate;
+            
+            setTimeout(() => {
+                if(state.qte.active) { scheduleRandomSkill(); return; } // QTE中は出さない
+
+                const isFizz = Math.random() > 0.5; // true=青, false=緑
+                
+                ui.skillBtn.className = `absolute w-16 h-16 rounded-full z-50 flex items-center justify-center text-3xl border-2 border-white cursor-pointer touch-manipulation ${isFizz ? 'skill-orb-blue' : 'skill-orb-green'}`;
+                
+                // データ属性にタイプを保持
+                ui.skillBtn.dataset.type = isFizz ? 'fizz' : 'herite';
+                
+                // 位置
+                const y = Math.max(100, Math.random() * (window.innerHeight - 300));
+                const x = Math.max(20, Math.random() * (window.innerWidth - 80));
+                ui.skillBtn.style.top = `${y}px`;
+                ui.skillBtn.style.left = `${x}px`;
+                ui.skillBtn.classList.remove('hidden');
+
+                skillTimeout = setTimeout(() => {
+                    ui.skillBtn.classList.add('hidden');
+                    scheduleRandomSkill();
+                }, 6000);
+            }, delay);
+        }
+
+        window.activateRandomSkill = function() {
+            ui.skillBtn.classList.add('hidden');
+            clearTimeout(skillTimeout);
+            
+            const isFizz = ui.skillBtn.dataset.type === 'fizz';
+            
+            if (isFizz) {
+                // 青(フィズ): 時限バフ
+                state.buffMult = 7;
+                document.getElementById('buff-indicator').classList.remove('hidden');
+                addLog(`フィズの支援！【${state.skill1Name}】発動！ 10秒間、威力が7倍に跳ね上がる！！`, "fizz");
+                
+                setTimeout(() => {
+                    state.buffMult = 1;
+                    document.getElementById('buff-indicator').classList.add('hidden');
+                    addLog("バフの効果が終了した。", "system");
+                    updateUI();
+                }, 10000);
+            } else {
+                // 緑(ヘリテ): 瞬間大量獲得
+                const burst = getActualClickPower() * 300;
+                state.dp += burst;
+                state.population += burst;
+                
+                document.body.classList.add('shake-active');
+                setTimeout(() => document.body.classList.remove('shake-active'), 500);
+
+                addLog(`ヘリテの強襲！【${state.skill2Name}】炸裂！！ 一瞬で ${Math.floor(burst).toLocaleString()} 人が吹き飛んだ！`, "herite");
+            }
+            
+            updateUI();
+            scheduleRandomSkill();
+        };
+
+        // ==========================================
+        // 人類の抵抗 (QTEイベント)
+        // ==========================================
+        function scheduleQTE() {
+            // 約2〜4分に1回発生
+            const delay = Math.random() * 120000 + 120000;
+            setTimeout(() => {
+                // スキルバフ中や転生可能状態では発動しない
+                if(state.buffMult > 1 || state.population >= state.goal) {
+                    scheduleQTE();
+                    return;
+                }
+
+                state.qte.active = true;
+                state.qte.clicks = 0;
+                state.qte.timer = 10.0;
+                
+                document.getElementById('qte-overlay').classList.remove('hidden');
+                document.getElementById('qte-count').innerText = "0 / 30";
+                addLog("警告！人類の大規模な抵抗作戦が開始されました！迎撃してください！", "warn");
+                
+                // QTEタイマーループ
+                const qteInterval = setInterval(() => {
+                    if (!state.qte.active) { clearInterval(qteInterval); return; } // 成功で解除済み
+                    
+                    state.qte.timer -= 0.1;
+                    document.getElementById('qte-timer').innerText = state.qte.timer.toFixed(1);
+                    
+                    if (state.qte.timer <= 0) {
+                        // 失敗ペナルティ
+                        clearInterval(qteInterval);
+                        state.qte.active = false;
+                        document.getElementById('qte-overlay').classList.add('hidden');
+                        
+                        state.penaltyMult = 0.5; // 自動半分
+                        document.getElementById('penalty-icon').classList.remove('hidden');
+                        addLog("迎撃失敗！人類の抵抗により、30秒間自動進軍速度が半減します…", "warn");
+                        
+                        setTimeout(() => {
+                            state.penaltyMult = 1;
+                            document.getElementById('penalty-icon').classList.add('hidden');
+                            addLog("人類の抵抗が沈静化。進軍速度が元に戻った。", "system");
+                            updateUI();
+                        }, 30000);
+                        
+                        scheduleQTE(); // 次を予約
+                    }
+                }, 100);
+            }, delay);
+        }
+
+        // ==========================================
+        // 転生 (プレステージ) - confirmを使わない形式に変更
+        // ==========================================
+        let pendingReward = 0;
+        
+        window.doPrestige = function() {
+            if (state.population < state.goal) return;
+            
+            pendingReward = 1 + Math.floor((state.population - state.goal) / (state.goal * 0.1));
+            
+            const msg = `本当にこの世界を崩壊させますか？\n概念の欠片を ${pendingReward} 個 獲得し、全てがリセットされます。\n(※欠片による倍率ボーナスは引き継がれます)`;
+            document.getElementById('confirm-text').innerText = msg;
+            document.getElementById('confirm-modal').classList.remove('hidden');
+        };
+
+        window.closeConfirmModal = function() {
+            document.getElementById('confirm-modal').classList.add('hidden');
+        };
+
+        window.executePrestige = function() {
+            closeConfirmModal();
+            const reward = pendingReward;
+            
+            // データの引き継ぎとリセット
+            state.concepts += reward;
+            state.prestigeCount++;
+            state.goal *= 1000; // 次の目標は1000倍
+            
+            state.population = 0;
+            state.dp = 0;
+            state.clickPower = 1;
+            state.autoPower = 0;
+            state.shoe = 'barefoot';
+            state.unlockedShoes = ['barefoot'];
+            
+            // アップグレードのリセット
+            UPGRADES.forEach(u => { u.level = 0; u.cost = u.cost / Math.pow(u.costMult, u.level); });
+            // 初期コストに戻すための簡易処置 (実際は初期値を別保存するべきだが簡易的に)
+            UPGRADES[0].cost = 15; UPGRADES[1].cost = 50; UPGRADES[2].cost = 300; 
+            UPGRADES[3].cost = 1000; UPGRADES[4].cost = 5000; UPGRADES[5].cost = 10000;
+
+            addLog(`【次元跳躍】世界は完全に崩壊した。「概念の欠片」を手に入れ、次の次元へ…`, "system");
+            
+            switchTab('upgrades');
+            renderUpgrades();
+            updateUI();
+        };
+
+        // ==========================================
+        // 設定保存
+        // ==========================================
+        window.saveSettings = function() {
+            state.protagName = document.getElementById('input-name').value || "名無しちゃん";
+            state.skill1Name = document.getElementById('input-skill1').value || "オーラ強化";
+            state.skill2Name = document.getElementById('input-skill2').value || "正義の小人絶滅ビーム♡";
+            state.customShoeName = document.getElementById('input-custom-shoe').value || "カスタム枠";
+            
+            document.getElementById('settings-modal').classList.add('hidden');
+            
+            // 初期のログが削除されている可能性があるので、存在チェックを行う
+            const logProtagNameEl = document.getElementById('log-protag-name');
+            if (logProtagNameEl) {
+                logProtagNameEl.innerText = state.protagName;
+            }
+            
+            addLog(`設定を更新しました。`, "system");
+            renderEquipment();
+            updateUI();
+        };
+
+        // ==========================================
+        // メインループ起動
+        // ==========================================
+        renderUpgrades();
+        renderEquipment();
+        updateUI();
+        scheduleRandomSkill();
+        scheduleQTE();
+
+        // 毎秒自動獲得 (100msごとに処理)
+        setInterval(() => {
+            const ap = getActualAutoPower();
+            if (ap > 0 && !state.qte.active) { // QTE中は自動増加停止
+                state.dp += ap / 10;
+                state.population += ap / 10;
+                updateUI();
+            }
+        }, 100);
+
+    </script>
+</body>
+</html>
